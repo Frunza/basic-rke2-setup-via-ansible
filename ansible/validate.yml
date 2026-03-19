@@ -1,0 +1,89 @@
+# ansible/validate.yml
+- name: Validate RKE2 cluster
+  hosts: servers[0]
+  become: true
+  vars:
+    kubectlCmd: "/var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml"
+  tasks:
+    - name: Wait for Kubernetes API to stabilize
+      command: "{{ kubectlCmd }} get --raw=/readyz"
+      register: apiReady
+      retries: 30
+      delay: 5
+      until: apiReady.rc == 0
+      changed_when: false
+
+    - name: Wait for all nodes to become Ready
+      command: "{{ kubectlCmd }} get nodes --no-headers"
+      register: nodeStatus
+      retries: 30
+      delay: 10
+      until: >
+        nodeStatus.stdout_lines
+        | select("search", " NotReady")
+        | list
+        | length == 0
+      changed_when: false
+
+    - name: Get nodes with their status
+      command: "{{ kubectlCmd }} get nodes -o json"
+      register: nodesJson
+      changed_when: false
+    
+    - name: Parse node data
+      set_fact:
+        nodesList: "{{ (nodesJson.stdout | from_json)['items'] }}"
+    
+    - name: Check each node's Ready condition
+      set_fact:
+        notReadyNodes: "{{ notReadyNodes | default([]) + [item.metadata.name] }}"
+      loop: "{{ nodesList }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      when: item.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first != 'True'
+    
+    - name: Fail if any node is NotReady
+      fail:
+        msg: "The following nodes are NotReady: {{ notReadyNodes | join(', ') }}"
+      when: notReadyNodes is defined and notReadyNodes | length > 0
+
+    - name: Get system pods as JSON
+      command: "{{ kubectlCmd }} get pods -n kube-system -o json"
+      register: podsJson
+      changed_when: false
+
+    - name: Parse pod list
+      set_fact:
+        podList: "{{ (podsJson.stdout | from_json)['items'] }}"
+
+    - name: Collect unhealthy pods
+      set_fact:
+        unhealthyPods: "{{ unhealthyPods | default([]) + [item.metadata.name] }}"
+      loop: "{{ podList }}"
+      loop_control:
+        label: "{{ item.metadata.name }}"
+      when: >
+        (
+          not item.metadata.name.startswith('helm-install-')
+        )
+        and
+        (
+          (
+            item.status.phase not in ['Running', 'Succeeded']
+          )
+          or
+          (
+            item.status.containerStatuses is defined and
+            (
+              item.status.containerStatuses
+              | selectattr('ready', 'equalto', false)
+              | list
+              | length > 0
+            )
+          )
+        )
+
+    - name: Fail if any pod is unhealthy
+      fail:
+        msg: "Unhealthy system pods: {{ unhealthyPods | join(', ') }}"
+      when: unhealthyPods is defined and unhealthyPods | length > 0

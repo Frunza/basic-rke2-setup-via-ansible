@@ -1,0 +1,87 @@
+# ansible/servers.yml
+- name: Install and configure RKE2 servers
+  hosts: servers
+  gather_facts: true
+  become: true
+  serial: 1
+
+  tasks:
+    - name: Ensure config directory exists
+      ansible.builtin.file:
+        path: "{{ rke2ConfigDir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install RKE2 server
+      ansible.builtin.shell: curl -sfL {{ rke2InstallScriptUrl }} | INSTALL_RKE2_VERSION={{ rke2Version }} sh -
+      args:
+        creates: /usr/local/bin/rke2
+
+    - name: Write bootstrap server config
+      ansible.builtin.copy:
+        dest: "{{ rke2ConfigFile }}"
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          token: {{ rke2Token }}
+          write-kubeconfig-mode: "{{ rke2KubeconfigMode }}"
+          tls-san:
+            - {{ rke2RegistrationAddress }}
+            - 127.0.0.1
+            - localhost
+            {% for host in groups['servers'] %}
+            - {{ hostvars[host].ansible_host | default(host) }}
+            {% endfor %}
+      when: inventory_hostname == rke2BootstrapHost
+      notify: restart rke2-server
+
+    - name: Write joining server config
+      ansible.builtin.copy:
+        dest: "{{ rke2ConfigFile }}"
+        owner: root
+        group: root
+        mode: "0600"
+        content: |
+          server: https://{{ rke2RegistrationAddress }}:{{ rke2RegistrationPort }}
+          token: {{ rke2Token }}
+          write-kubeconfig-mode: "{{ rke2KubeconfigMode }}"
+          tls-san:
+            - {{ rke2RegistrationAddress }}
+            - 127.0.0.1
+            - localhost
+            {% for host in groups['servers'] %}
+            - {{ hostvars[host].ansible_host | default(host) }}
+            {% endfor %}
+      when: inventory_hostname != rke2BootstrapHost
+      notify: restart rke2-server
+
+    - name: Ensure rke2-server is enabled and started
+      ansible.builtin.systemd:
+        name: rke2-server
+        enabled: true
+        state: started
+
+    - name: Wait for registration port via load balancer
+      ansible.builtin.wait_for:
+        host: "{{ rke2RegistrationAddress }}"
+        port: "{{ rke2RegistrationPort }}"
+        delay: 5
+        timeout: 300
+      delegate_to: localhost
+      become: false
+      when: inventory_hostname == rke2BootstrapHost
+
+    - name: Wait for node-token to exist on bootstrap server
+      ansible.builtin.wait_for:
+        path: /var/lib/rancher/rke2/server/node-token
+        timeout: 300
+      when: inventory_hostname == rke2BootstrapHost
+
+  handlers:
+    - name: restart rke2-server
+      ansible.builtin.systemd:
+        name: rke2-server
+        state: restarted

@@ -1,0 +1,77 @@
+# ansible/lb.yml
+- name: Configure HAProxy for RKE2
+  hosts:
+    - lb
+  gather_facts: true
+  become: true
+  vars:
+    rke2RegistrationPort: 9345
+    rke2ApiPort: 6443
+    haproxyBalanceMethod: roundrobin
+
+  tasks:
+    - name: Install haproxy
+      ansible.builtin.apt:
+        name: haproxy
+        state: present
+        update_cache: true
+
+    - name: Build HAProxy backend server list
+      ansible.builtin.set_fact:
+        haproxyServers: |
+          {% for host in groups['servers'] %}
+          server {{ host | replace('.', '-') }} {{ hostvars[host].ansible_host | default(host) }}:{{ rke2RegistrationPort }} check
+          {% endfor %}
+
+    - name: Build HAProxy backend API list
+      ansible.builtin.set_fact:
+        haproxyApiServers: |
+          {% for host in groups['servers'] %}
+          server {{ host | replace('.', '-') }} {{ hostvars[host].ansible_host | default(host) }}:{{ rke2ApiPort }} check
+          {% endfor %}
+
+    - name: Write haproxy configuration
+      ansible.builtin.copy:
+        dest: /etc/haproxy/haproxy.cfg
+        mode: "0644"
+        content: |
+          global
+            daemon
+            maxconn 2048
+
+          defaults
+            mode tcp
+            timeout connect 10s
+            timeout client 1m
+            timeout server 1m
+
+          frontend rke2_registration
+            bind *:{{ rke2RegistrationPort }}
+            default_backend rke2_registration_backend
+
+          backend rke2_registration_backend
+            balance {{ haproxyBalanceMethod }}
+            option tcp-check
+          {{ haproxyServers }}
+
+          frontend kube_api
+            bind *:{{ rke2ApiPort }}
+            default_backend kube_api_backend
+
+          backend kube_api_backend
+            balance {{ haproxyBalanceMethod }}
+            option tcp-check
+          {{ haproxyApiServers }}
+      notify: restart haproxy
+
+    - name: Ensure haproxy is running
+      ansible.builtin.systemd:
+        name: haproxy
+        enabled: true
+        state: started
+
+  handlers:
+    - name: restart haproxy
+      ansible.builtin.systemd:
+        name: haproxy
+        state: restarted

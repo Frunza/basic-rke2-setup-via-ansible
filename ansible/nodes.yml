@@ -1,0 +1,65 @@
+# ansible/nodes.yml
+- name: Basic configuration for all RKE2 nodes
+  hosts:
+    - servers
+    - agents
+  gather_facts: true
+  become: true
+  vars:
+    k8sPackages:
+      - curl
+      - ca-certificates
+    k8sKernelModules:
+      - overlay
+      - br_netfilter
+    k8sSysctl:
+      net.ipv4.ip_forward: "1"
+      net.bridge.bridge-nf-call-iptables: "1"
+      net.bridge.bridge-nf-call-ip6tables: "1"
+
+  tasks:
+    - name: Install Kubernetes prerequisite packages
+      ansible.builtin.apt:
+        name: "{{ k8sPackages }}"
+        state: present
+        update_cache: true
+
+    - name: Ensure kernel modules load at boot
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        mode: "0644"
+        content: |
+          {% for module in k8sKernelModules %}
+          {{ module }}
+          {% endfor %}
+
+    - name: Load kernel modules now
+      ansible.builtin.command: "modprobe {{ item }}"
+      loop: "{{ k8sKernelModules }}"
+      changed_when: false
+
+    - name: Configure sysctl settings for Kubernetes
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/90-k8s.conf
+        mode: "0644"
+        content: |
+          {% for key, value in k8sSysctl.items() %}
+          {{ key }} = {{ value }}
+          {% endfor %}
+      notify: apply sysctl
+
+    - name: Disable swap immediately if enabled
+      ansible.builtin.command: swapoff -a
+      when: ansible_swaptotal_mb | int > 0
+      changed_when: ansible_swaptotal_mb | int > 0
+
+    - name: Disable swap in fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(?!#)(.+\s+swap\s+.+)$'
+        replace: '# \1'
+
+  handlers:
+    - name: apply sysctl
+      ansible.builtin.command: sysctl --system
+      changed_when: false

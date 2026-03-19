@@ -1,0 +1,10 @@
+# group_vars/all.yml
+rke2Version: "{{ lookup('env', 'RKE2_VERSION') | default('v1.35.1+rke2r1', true) }}"
+rke2Token: "{{ lookup('env', 'RKE2_TOKEN') }}"
+rke2ConfigDir: /etc/rancher/rke2
+rke2ConfigFile: /etc/rancher/rke2/config.yaml
+rke2InstallScriptUrl: https://get.rke2.io
+rke2RegistrationPort: 9345
+
+rke2RegistrationHost: "{{ groups['lb'][0] }}"
+rke2RegistrationAddress: "{{ rke2RegistrationHost }}"

@@ -1,0 +1,3 @@
+# group_vars/servers.yml
+rke2KubeconfigMode: "0644"
+rke2BootstrapHost: "{{ groups['servers'][0] }}"

@@ -1,0 +1,24 @@
+# ansible/preflight.yml
+- name: Validate cluster inventory
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Ensure exactly one load balancer exists
+      ansible.builtin.assert:
+        that:
+          - groups['lb'] is defined
+          - groups['lb'] | length == 1
+        fail_msg: "Inventory must define exactly one host in [lb]"
+
+    - name: Ensure at least one server exists
+      ansible.builtin.assert:
+        that:
+          - groups['servers'] | length > 0
+        fail_msg: "Inventory must define at least one server"
+
+    - name: Ensure at least one agent exists
+      ansible.builtin.assert:
+        that:
+          - groups['agents'] | length > 0
+        fail_msg: "Inventory must define at least one agent"
