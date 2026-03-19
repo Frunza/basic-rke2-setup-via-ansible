@@ -105,7 +105,7 @@ The inventory file can look like:
 ```
 Don't forget to update the hosts with your target virtual machines.
 
-Now let's get to the playboks.
+Now let's get to the playbooks.
 
 First of all, let's go over the validation playbook:
 ```sh
@@ -134,7 +134,7 @@ First of all, let's go over the validation playbook:
           - groups['agents'] | length > 0
         fail_msg: "Inventory must define at least one agent"
 ```
-Here we only check that we have exactly one load balancer, and at least one server and agent. Feel free to modify this for your environmet. Since the script that calls this playbook exists after the first failure, we do not have to recheck this in the other plabooks. If you structure the project different, you might have to check this more often.
+Here we only check that we have exactly one load balancer, and at least one server and agent. Feel free to modify this for your environment. Since the script that calls this playbook exists after the first failure, we do not have to recheck this in the other playbooks. If you structure the project different, you might have to check this more often.
 
 The playbook to set up the load balancer looks like:
 ```sh
@@ -291,8 +291,8 @@ We can now apply necessary `RKE2` configuration to all nodes:
       changed_when: false
 ```
 The first task in the playbook installs `curl`, which is needed for downloading `RKE2` binaries, pulling container images, etc. and `ca-certificates`, which is needed for HTTPS.
-The second task creates a configuration file that tells the system to load kernel modules automatically on boot. The `overlay` module enables `OverlayFS`, a odern filesystem used by container runways for efficient layer-based image storage, and the `br_netfilter` module allows bridged network traffic to pass through iptables, enabling `k8s` network policies. The next tasks loads this modules right away, making them available for the current session.
-The forth task creates a *systemd sysctl* configuration file that persists across reboots. Note that the name of the configuration is *90-k8s.conf*, whcih starts with 90, making it to load after default configurations; a lower number makes it load faster. It this configuration we want to set *net.ipv4.ip_forward=1* to enable `k8s` networking and *bridge-nf-call* settings for container networking. At the end we notify a handler to apply our configuration immediately.
+The second task creates a configuration file that tells the system to load kernel modules automatically on boot. The `overlay` module enables `OverlayFS`, a modern filesystem used by container runways for efficient layer-based image storage, and the `br_netfilter` module allows bridged network traffic to pass through iptables, enabling `k8s` network policies. The next tasks loads this modules right away, making them available for the current session.
+The forth task creates a *systemd sysctl* configuration file that persists across reboots. Note that the name of the configuration is *90-k8s.conf*, which starts with 90, making it to load after default configurations; a lower number makes it load faster. It this configuration we want to set *net.ipv4.ip_forward=1* to enable `k8s` networking and *bridge-nf-call* settings for container networking. At the end we notify a handler to apply our configuration immediately.
 The fifth task disables swap if it is enabled.
 The last task comments out swap entries in */etc/fstab* to prevent swap from re-enabling after reboot by commenting out lines that contain *swap*. Depending on your setup, you might not need this task, but there's no harm in running it either way.
 
@@ -317,7 +317,7 @@ rke2KubeconfigMode: "0644"
 rke2BootstrapHost: "{{ groups['servers'][0] }}"
 ```
 
-Since there is only one boostrap host, it is added as a variable as the first machine from the hosts: *rke2BootstrapHost: "{{ groups['servers'][0] }}"*. Note that we register the hosts with the load balancer: *rke2RegistrationHost: "{{ groups['lb'][0] }}"*. This has the advantage that we can use more servers for high availablity environments, as well as one srver for trying things out.
+Since there is only one bootstrap host, it is added as a variable as the first machine from the hosts: *rke2BootstrapHost: "{{ groups['servers'][0] }}"*. Note that we register the hosts with the load balancer: *rke2RegistrationHost: "{{ groups['lb'][0] }}"*. This has the advantage that we can use more servers for high availability environments, as well as one server for trying things out.
 The *rke2Version* takes it value from the RKE2_VERSION environment variable if it exists, or from a default value otherwise.
 
 The following playbook configures `RKE2` server nodes in a high-availability configuration:
@@ -410,8 +410,8 @@ The following playbook configures `RKE2` server nodes in a high-availability con
         name: rke2-server
         state: restarted
 ```
-Because there is only one bootstrap server, the *serial: 1* setting is used; you will also notice that some tasks are are enabled for the bootstrap host, whle others are not.
-The first task creates the directory where the `RKE2` configuration should be located, and the second task runs the `RKE2` intallation script. It is good practice to use a specific `RKE2` version instead of using the latest one. When we run the installation script, we use the INSTALL_RKE2_VERSION to specify the `RKE2` version, which value we take from the *rke2Version* variable. Note that INSTALL_RKE2_VERSION is specific to the `RKE2` installation script, while RKE2_VERSION used in the *rke2Version* variable is an environment variable we defined ourselves.
+Because there is only one bootstrap server, the *serial: 1* setting is used; you will also notice that some tasks are are enabled for the bootstrap host, while others are not.
+The first task creates the directory where the `RKE2` configuration should be located, and the second task runs the `RKE2` installation script. It is good practice to use a specific `RKE2` version instead of using the latest one. When we run the installation script, we use the INSTALL_RKE2_VERSION to specify the `RKE2` version, which value we take from the *rke2Version* variable. Note that INSTALL_RKE2_VERSION is specific to the `RKE2` installation script, while RKE2_VERSION used in the *rke2Version* variable is an environment variable we defined ourselves.
 The next two tasks create `RKE2` configuration files for the bootstrap server and the joining servers. This is done using a *where* option, and both tasks notify `RKE2` to restart.
 The fifth task just starts the `RKE2` server.
 The sixth task waits for the bootstrap server to be ready to accept new server nodes, and the last one waits for the node token to be available for the bootstrap node.
@@ -461,7 +461,7 @@ The last thing to do is to configure the `RKE2` agents:
         name: rke2-agent
         state: restarted
 ```
-The first task creates the directory where the `RKE2` configuration should be located, and the second task runs the `RKE2` intallation script. Just as before, we use a specific version for `RKE2`.
+The first task creates the directory where the `RKE2` configuration should be located, and the second task runs the `RKE2` installation script. Just as before, we use a specific version for `RKE2`.
 The third task creates `RKE2` configuration file for the *rke2-agent* and notifies a restart at the end.
 The last task just starts the *rke2-agent*.
 
@@ -570,8 +570,8 @@ The last playbook does basic testing via `Ansible`:
         msg: "Unhealthy system pods: {{ unhealthyPods | join(', ') }}"
       when: unhealthyPods is defined and unhealthyPods | length > 0
 ```
-The first tree tasks retrieve information about the nodes, and the fourth fails if not all nodes are ready.
-The fifth task retrieves information about the *kube-system* pods, while the last task fails i not all pods are running.
+The first five tasks retrieve information about the nodes, and the sixth fails if not all nodes are ready.
+The next tree tasks retrieves information about the *kube-system* pods, while the last task fails i not all pods are running.
 
 If you want to play around with the cluster yourself, depending on your setup, you need to ssh into the bootstrap virtual machine to retrieve the *kubeconfig* file:
 ```sh
@@ -584,4 +584,4 @@ sed -i 's/127.0.0.1/192.168.2.2/g' ~/.kube/config
 
 ##  Considerations
 
-While this setup uses a dedicated external load balancer (`HAProxy`) running on a separate virtual machine to provide a stable registration address and `k8s` API endpoint, several alternative approaches exist for achieving high availability in `RKE2` clusters. A popular modern option is `kube-vip`. Many bare-metal and on-premises deployments favor `kube-vip` for its simplicity and tight integration with `k8s`. Other patterns include round-robin DNS, cloud-provider elastic IPs, or even keepalived and `HAProxy` pairs for additional redundancy on the load-balancer layer itself.
+While this setup uses a dedicated external load balancer (`HAProxy`) running on a separate virtual machine to provide a stable registration address and `k8s` API endpoint, several alternative approaches exist for achieving high availability in `RKE2` clusters. A popular modern option is `kube-vip`. Many bare-metal and on-premises deployments favor `kube-vip` for its simplicity and tight integration with `k8s`. Other patterns include round-robin DNS, cloud-provider elastic IPs, or even `keepalived` and `HAProxy` pairs for additional redundancy on the load-balancer layer itself.
