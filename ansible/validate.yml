@@ -47,19 +47,39 @@
         msg: "The following nodes are NotReady: {{ notReadyNodes | join(', ') }}"
       when: notReadyNodes is defined and notReadyNodes | length > 0
 
-    - name: Get system pods as JSON
+    - name: Wait for system pods to become healthy
       command: "{{ kubectlCmd }} get pods -n kube-system -o json"
       register: podsJson
+      retries: 60
+      delay: 10
+      until: >
+        (podsJson.stdout | from_json)['items']
+        | rejectattr('metadata.name', 'match', '^helm-install-')
+        | map(attribute='status')
+        | map(attribute='phase')
+        | select('match', '^(Running|Succeeded)$')
+        | list
+        | length
+        ==
+        (podsJson.stdout | from_json)['items']
+        | rejectattr('metadata.name', 'match', '^helm-install-')
+        | list
+        | length
       changed_when: false
 
-    - name: Parse pod list
-      set_fact:
-        podList: "{{ (podsJson.stdout | from_json)['items'] }}"
+    - name: Verify all pods are running
+      command: "{{ kubectlCmd }} get pods -n kube-system -o json"
+      register: podsJsonFinal
+      changed_when: false
 
-    - name: Collect unhealthy pods
+    - name: Parse pod list for final check
       set_fact:
-        unhealthyPods: "{{ unhealthyPods | default([]) + [item.metadata.name] }}"
-      loop: "{{ podList }}"
+        finalPodList: "{{ (podsJsonFinal.stdout | from_json)['items'] }}"
+
+    - name: Collect unhealthy pods (final)
+      set_fact:
+        finalUnhealthyPods: "{{ finalUnhealthyPods | default([]) + [item.metadata.name] }}"
+      loop: "{{ finalPodList }}"
       loop_control:
         label: "{{ item.metadata.name }}"
       when: >
@@ -85,5 +105,5 @@
 
     - name: Fail if any pod is unhealthy
       fail:
-        msg: "Unhealthy system pods: {{ unhealthyPods | join(', ') }}"
-      when: unhealthyPods is defined and unhealthyPods | length > 0
+        msg: "Unhealthy system pods: {{ finalUnhealthyPods | join(', ') }}"
+      when: finalUnhealthyPods is defined and finalUnhealthyPods | length > 0
