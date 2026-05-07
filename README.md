@@ -49,7 +49,7 @@ services:
     entrypoint: ["sh", "-c"]
     command: ["sh runAnsible.sh"]
 ```
-The service is called *main*, and it runs a script for `Ansible`. We also have an environment variables with the SSH key needed to connect to the virtual machines, used by `Ansible`.
+The service is called *main*, and it runs a script for `Ansible`.
 
 Before we get to the content of *runAnsible.sh*, let's talk a bit about how this looks like. Let's say we want to have 3 control plane nodes and 2 worker nodes. For this scenario, you do need an extra virtual machine to act like a load balancer for your control plane nodes. With that in mind, we will have more `Ansible` playbooks to set up the load balancer virtual machine, another one to do common setup on all virtual machines, and 2 other playbooks to set up the control plane nodes and the worker nodes.
 
